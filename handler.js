@@ -1,32 +1,19 @@
 'use strict';
 
-// to execute use: sls invoke local --function hello
+// to execute use: sls invoke local --function hello --data '{"origin": "SFO", "destination": "YOW", "date": "2017-04-14"}'
 // to deploy use: sls deploy
 
 const request = require("request")
 const fs = require("fs")
 
 module.exports.hello = (event, context, callback) => {
-  const origin = "SFO"
-  const destination = "YOW"
-  const date = "2017-04-14"
-
-  const departureHourBefore = 24
-  const departureHourAfter = 19
-  const arrivalHourBefore = 14
-  const arrivalHourAfter = 0
-
-  const maxEconomyMiles = null
-  const maxBusinessMiles = 50000
-  const maxFirstMiles = null
-
-  console.log("Hitting united...")
+  console.log("Hitting United...")
 
   const query = JSON.parse(fs.readFileSync("united-default-awd-request.json", "utf-8"))
-  query.Origin = origin
-  query.Destination = destination
-  query.DepartDate = date   // might need different format
-  query.ReturnDate = date   // might need different format
+  query.Origin = event.origin
+  query.Destination = event.destination
+  query.DepartDate = event.date   // might need different format
+  query.ReturnDate = event.date   // might need different format
 
   const results = []  // departureTimeLocal, arrivalTimeLocal, lowestEconomy, lowestBusiness, lowestFirst
 
@@ -61,12 +48,21 @@ module.exports.hello = (event, context, callback) => {
       let addFlight = true
 
       // Add filters for time
+      const departureHourBefore = event.departureHourBefore || 24
+      const departureHourAfter = event.departureHourAfter || 0
+      const arrivalHourBefore = event.arrivalHourBefore || 24
+      const arrivalHourAfter = event.arrivalHourAfter || 0
+
       const departureHour = new Date(result.departureTimeLocal).getUTCHours()
       const arrivalHour = new Date(result.arrivalTimeLocal).getUTCHours()
       if (departureHour < departureHourAfter || departureHour > departureHourBefore || arrivalHour < arrivalHourAfter || arrivalHour > arrivalHourBefore)
         addFlight = false
 
       // Dont show flights missing seats in a class we want
+      const maxEconomyMiles = event.maxEconomyMiles || null
+      const maxBusinessMiles = event.maxBusinessMiles || null
+      const maxFirstMiles = event.maxFirstMiles || null
+
       if (maxEconomyMiles !== null && result.lowestEconomy === null)
         addFlight = false
       if (maxBusinessMiles !== null && result.lowestBusiness === null)
@@ -82,14 +78,10 @@ module.exports.hello = (event, context, callback) => {
       if (maxFirstMiles !== null && result.lowestFirst > maxFirstMiles)
         addFlight = false
 
-      if (addFlight) {
-        console.log(`Flight: ${result.departureTimeLocal} -> ${result.arrivalTimeLocal}`)
-        console.log(`  Economy: ${result.lowestEconomy}`)
-        console.log(`  Business: ${result.lowestBusiness}`)
-        console.log(`  First: ${result.lowestFirst}`)
-      }
+      if (addFlight)
+        results.push(result)
     }
 
-
+    callback(null, results)
   })
 }
